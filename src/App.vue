@@ -1,19 +1,65 @@
 <template>
-  <pre>{{ isOnline }}</pre>
-  <pre>{{ currentRate }}</pre>
-  <pre>{{ history }}</pre>
+  <h1>Курсы валют</h1>
+
+  <h2>
+    <span>Актуальный курс</span> |
+    <span
+      :class="{ __online: isOnline }"
+      class="connection"
+      v-text="isOnline ? 'онлайн' : 'оффлайн'"
+    />
+  </h2>
+
+  <div class="rates-container">
+    <div class="row">
+      <div class="col">Symbol</div>
+      <div class="col">Ask</div>
+      <div class="col">Bid</div>
+    </div>
+    <div v-for="rate of currentRateList" :key="rate.symbol" class="row">
+      <div class="col" v-text="rate.symbol" />
+      <div class="col" v-text="rate.ask" />
+      <div class="col" v-text="rate.bid" />
+    </div>
+  </div>
+
+  <h2>Недавняя история</h2>
+  <code v-for="(symbolHistory, symbol) of history" :key="symbol">
+    <h3>{{ symbol }}</h3>
+    <div
+      v-for="(symbolHistoryItem, index) in symbolHistory"
+      :key="symbolHistoryItem.symbol + index"
+    >
+      {{ JSON.stringify(symbolHistoryItem) }}
+    </div>
+  </code>
 </template>
 
 <script>
+/** core **/
 import { reactive, ref } from "vue";
+
+/** components **/
 
 export default {
   name: "App",
 
+  components: {},
+
   setup() {
-    const ws = reactive({});
-    const history = reactive([]);
     const isOnline = ref(false);
+    const ws = reactive({});
+
+    const symbolList = process?.env?.VUE_APP_SYMBOL_LIST?.split(",");
+    const symbols = reactive(symbolList);
+    const history = reactive(
+      symbolList.reduce((acc, item) => {
+        acc[item] = [];
+        return acc;
+      }, {})
+    );
+
+    const notification = ref("");
 
     return {
       // Конечно, в реальном приложении мы не должны хранить
@@ -22,9 +68,11 @@ export default {
       // или выдавали ключ к API только аутентифицированным клиентам.
       API_KEY: process?.env?.VUE_APP_API_KEY,
       API_URL: process?.env?.VUE_APP_API_URL,
+      symbols,
       ws,
       history,
-      isOnline
+      isOnline,
+      notification
     };
   },
 
@@ -35,29 +83,45 @@ export default {
         this.ws = new WebSocket(this.API_URL);
 
         this.ws.onopen = () => {
-          console.log("WS was opened");
-          // TODO: add symbols
-          this.ws.send(`{"userKey":"${this.API_KEY}", "symbol":"GBPUSD"}`);
+          this.notification = "WebSocket connected";
+          this.ws.send(
+            `{"userKey":"${this.API_KEY}", "symbol":"${this.symbols.join()}"}`
+          );
           this.isOnline = true;
         };
 
         this.ws.onmessage = msg => {
-          console.log("WS got a message", msg?.data);
-          this.history.push(msg?.data);
-          if (this.history?.length > 10) {
-            // храним только последние 10 сообщений
-            this.history.shift();
+          if (msg?.data !== "Connected") {
+            const messageData = JSON.parse(msg?.data);
+            const symbol = messageData?.symbol;
+
+            if (symbol) {
+              if (!this.history[symbol]) {
+                // Вообще, мы уже инициализировали отдельные свойства под каждый symbol в setup,
+                // но на тот случай, если новые symbol будут добавлены в runtime
+                this.history[symbol] = [];
+              }
+
+              // новые сообщения вставляем в начало массива
+              this.history[symbol].unshift(messageData);
+
+              if (this.history[symbol].length > 10) {
+                // храним только последние 10 сообщений
+                this.history[symbol].pop();
+              }
+            }
           }
         };
 
         this.ws.onclose = () => {
-          console.log("WS was closed");
+          this.notification = "WebSocket connection closed";
           // TODO: add reconnect
           this.isOnline = false;
         };
 
         this.ws.onerror = err => {
-          console.log("WS caught an Error", err);
+          console.error(err);
+          this.notification = "WebSocket got en error";
           this.isOnline = false;
         };
       } catch (e) {
@@ -69,20 +133,54 @@ export default {
   },
 
   computed: {
-    currentRate() {
-      return this?.history[this?.history?.length - 1] || {};
+    /**
+     * Возвращает актуальный курс для каждого symbol (instrument / currency pair)
+     * @returns {*[]}
+     */
+    currentRateList() {
+      return this.symbols.map(symbol => {
+        return this.history[symbol]?.length
+          ? this.history[symbol][0] // в начале массива хранится наиболее свежая информация
+          : { symbol };
+      });
     }
   }
 };
 </script>
 
-<style>
-#app {
+<style scoped lang="scss">
+body {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
+  margin-top: 64px;
+}
+
+.connection {
+  color: red;
+  font-size: 0.6em;
+
+  &.__online {
+    color: green;
+  }
+}
+
+.rates-container {
+  max-width: 320px;
+  margin: 24px auto;
+
+  .row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+
+    &:nth-child(2n + 2) {
+      background: lightgrey;
+    }
+  }
+
+  .col {
+    padding: 4px 8px;
+  }
 }
 </style>

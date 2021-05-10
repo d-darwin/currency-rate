@@ -12,9 +12,9 @@
 
   <div class="rates-container">
     <div class="row">
-      <div class="col">Symbol</div>
-      <div class="col">Ask</div>
-      <div class="col">Bid</div>
+      <div class="col">Пара</div>
+      <div class="col">Продажа</div>
+      <div class="col">Покупка</div>
     </div>
     <div v-for="rate of currentRateList" :key="rate.symbol" class="row">
       <div class="col" v-text="rate.symbol" />
@@ -59,8 +59,6 @@ export default {
       }, {})
     );
 
-    const notification = ref("");
-
     return {
       // Конечно, в реальном приложении мы не должны хранить
       // любые чувствительные данные на фронте (ключи, токены, ...).
@@ -71,8 +69,7 @@ export default {
       symbols,
       ws,
       history,
-      isOnline,
-      notification
+      isOnline
     };
   },
 
@@ -83,7 +80,7 @@ export default {
         this.ws = new WebSocket(this.API_URL);
 
         this.ws.onopen = () => {
-          this.notification = "WebSocket connected";
+          console.log("WebSocket connected");
           this.ws.send(
             `{"userKey":"${this.API_KEY}", "symbol":"${this.symbols.join()}"}`
           );
@@ -114,14 +111,13 @@ export default {
         };
 
         this.ws.onclose = () => {
-          this.notification = "WebSocket connection closed";
+          console.warn("WebSocket connection closed");
           // TODO: add reconnect
           this.isOnline = false;
         };
 
         this.ws.onerror = err => {
-          console.error(err);
-          this.notification = "WebSocket got en error";
+          console.error("WebSocket got en error", err);
           this.isOnline = false;
         };
       } catch (e) {

@@ -153,6 +153,13 @@ body {
   margin-top: 64px;
 }
 
+h1,
+h2,
+h3,
+code {
+  text-align: center;
+}
+
 .connection {
   color: red;
   font-size: 0.6em;
